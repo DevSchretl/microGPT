@@ -1,0 +1,24 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+
+# Datasets
+edu_fineweb10B/
+smoltalk_chat/
+
+# Tool-generated files
+.understand-anything/
+.claude
+
+# Model weights
+*.pth
