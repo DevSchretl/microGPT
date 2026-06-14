@@ -1,0 +1,4 @@
+# Web backend deps. torch / tiktoken / numpy are already required by the model
+# code and are assumed installed in the same environment.
+fastapi
+uvicorn[standard]
