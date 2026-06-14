@@ -8,11 +8,12 @@ difference is the documents are multi-turn conversations rather than raw text,
 so each turn is wrapped in chat special tokens and the model learns to predict
 across that structure.
 
-Run simply as:
-    $ python prepare_finetune.py
-Will save shards to the local directory "smoltalk_chat".
+Run from the repo root as:
+    $ python data/prepare_finetune.py
+Will save shards to "smoltalk_chat/" in the repo root.
 
-To fine-tune on the result, point train.py at this directory (its DATA_DIR).
+To fine-tune on the result, point train.py at this directory
+(`python train.py ... --data-dir smoltalk_chat`).
 
 Each conversation is rendered as a flat token stream, e.g.:
 
@@ -33,13 +34,21 @@ Notes / assumptions:
 """
 
 import os
+import sys
 import multiprocessing as mp
 
 import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
 
-from chat_tokenizer import SPECIAL_TOKENS, get_encoding
+# This script lives in data/, but the model package sits at the repo root; add
+# the root to sys.path so `from models import ...` resolves when run directly
+# (`python data/prepare_finetune.py`). Also re-run by spawned worker processes.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from models import SPECIAL_TOKENS, get_encoding  # noqa: E402  (after sys.path setup)
 
 local_dir = "smoltalk_chat"
 # Smaller than pretraining's 100M: the SFT set is far smaller, so a smaller
@@ -47,7 +56,7 @@ local_dir = "smoltalk_chat"
 shard_size = int(1e7)  # 10M tokens per shard
 
 # Module-level so multiprocessing worker processes can access these after import.
-# Special-token ids live in chat_tokenizer.py so prep and sampling never drift.
+# Special-token ids live in models/tokenizer.py so prep and sampling never drift.
 enc = get_encoding()
 bos = SPECIAL_TOKENS["<|bos|>"]
 ROLE_TOKENS = {
@@ -85,7 +94,8 @@ def write_datafile(filename, tokens_np):
 
 
 if __name__ == "__main__":
-    DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), local_dir)
+    # Write to the repo root so train.py's --data-dir smoltalk_chat finds it.
+    DATA_CACHE_DIR = os.path.join(REPO_ROOT, local_dir)
     os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
     ds = load_dataset("HuggingFaceTB/smol-smoltalk", split="train")

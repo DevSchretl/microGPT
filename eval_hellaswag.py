@@ -1,7 +1,7 @@
 """
 HellaSwag evaluation script.
 
-Scores a trained model (see gpt2.py / gpt3.py) on HellaSwag, the standard
+Scores a trained model (see models/) on HellaSwag, the standard
 likelihood-based benchmark for base language models of this size (the same one
 used in Karpathy's build-nanogpt). No text is generated: each example gives a
 context and 4 candidate endings, and the model picks the ending it finds most
@@ -27,7 +27,8 @@ import torch
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from chat_tokenizer import get_encoding
+from common import build_model, get_device
+from models import get_encoding
 
 # Canonical HellaSwag data (rowanz/hellaswag). val = 10,042 examples.
 DATA_URLS = {
@@ -35,26 +36,6 @@ DATA_URLS = {
     "train": "https://raw.githubusercontent.com/rowanz/hellaswag/master/data/hellaswag_train.jsonl",
     "test":  "https://raw.githubusercontent.com/rowanz/hellaswag/master/data/hellaswag_test.jsonl",
 }
-
-
-def build_model(arch):
-    """Instantiate a fresh model for the given architecture name."""
-    if arch == "gpt2":
-        from gpt2 import GPT, GPTConfig
-        return GPT(GPTConfig())
-    if arch == "gpt3":
-        from gpt3 import GPT3, GPT3Config
-        return GPT3(GPT3Config())
-    raise ValueError(f"unknown arch: {arch}")
-
-
-def get_device():
-    """Pick the best available device: cuda > mps > cpu."""
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 def download(split, data_dir):

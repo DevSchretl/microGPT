@@ -2,7 +2,7 @@
 Language-model training / fine-tuning script.
 
 Builds a model (gpt2 or gpt3), optionally loads a checkpoint, and trains it on
-the tokenized shards produced by prepare.py.
+the tokenized shards produced by data/prepare.py.
 
 Usage:
     $ python train.py                                  # gpt2, resume gpt2_weights.pth
@@ -19,27 +19,9 @@ import numpy as np
 import torch
 from torch.amp import GradScaler
 
+from common import build_model, get_device
+
 # -----------------------------------------------------------------------------
-
-
-def build_model(arch):
-    """Instantiate a fresh model for the given architecture name."""
-    if arch == "gpt2":
-        from gpt2 import GPT, GPTConfig
-        return GPT(GPTConfig())
-    if arch == "gpt3":
-        from gpt3 import GPT3, GPT3Config
-        return GPT3(GPT3Config())
-    raise ValueError(f"unknown arch: {arch}")
-
-
-def get_device():
-    """Pick the best available device: cuda > mps > cpu."""
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 def get_lr(step, max_lr, min_lr, warmup_steps, max_steps):

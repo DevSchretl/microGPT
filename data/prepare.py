@@ -3,9 +3,10 @@ FineWeb-Edu dataset preprocessor.
 https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu
 
 Downloads and tokenizes the data and saves tokenized shards to disk.
-Run simply as:
-    $ python prepare.py
-Will save shards to the local directory "edu_fineweb10B".
+Run from the repo root as:
+    $ python data/prepare.py
+Will save shards to "edu_fineweb10B/" in the repo root (where train.py's
+default --data-dir looks for them).
 """
 
 import os
@@ -44,7 +45,10 @@ def write_datafile(filename, tokens_np):
 
 
 if __name__ == "__main__":
-    DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), local_dir)
+    # Write to the repo root (one level up from this data/ script) so the
+    # default --data-dir in train.py finds the shards.
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    DATA_CACHE_DIR = os.path.join(repo_root, local_dir)
     os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
     fw = load_dataset("HuggingFaceFW/fineweb-edu", name=remote_name, split="train")

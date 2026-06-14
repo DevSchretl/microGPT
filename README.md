@@ -4,23 +4,35 @@ Train small GPT language models from scratch in PyTorch, then chat with them.
 
 This is a compact, nanoGPT-style codebase for pretraining decoder-only transformers on the [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) corpus and, optionally, supervised fine-tuning them into a chat model on [smol-smoltalk](https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk). Two architectures are included:
 
-- **GPT-2 (124M)** — the classic architecture: learned position embeddings, LayerNorm, GELU MLP. See [gpt2.py](gpt2.py).
-- **GPT-3-style (254M)** — GPT-2's shape with well-established modern upgrades: RoPE, RMSNorm, SwiGLU, grouped-query attention (GQA), QK-norm, and no biases. Sized at ~40 tokens/parameter for the 10B-token FineWeb-Edu sample. See [gpt3.py](gpt3.py).
+- **GPT-2 (124M)** — the classic architecture: learned position embeddings, LayerNorm, GELU MLP. See [models/gpt2.py](models/gpt2.py).
+- **GPT-3-style (254M)** — GPT-2's shape with well-established modern upgrades: RoPE, RMSNorm, SwiGLU, grouped-query attention (GQA), QK-norm, and no biases. Sized at ~40 tokens/parameter for the 10B-token FineWeb-Edu sample. See [models/gpt3.py](models/gpt3.py).
 
 Both models expose the same surface (`forward(idx, targets=None) -> (logits, loss)`, `configure_optimizers`, `config.block_size`), so the same training and sampling scripts drive either one.
 
 ## Layout
 
+```
+models/    model + tokenizer definitions (importable as `from models import ...`)
+data/      dataset preprocessors (run as `python data/<script>.py`)
+server/    FastAPI backend that serves the chat model
+web/        React + Vite chat frontend
+*.py       runnable scripts at the repo root (train / sample / eval)
+```
+
 | File | Purpose |
 | --- | --- |
-| [gpt2.py](gpt2.py) | GPT-2 model definition (`GPT`, `GPTConfig`) |
-| [gpt3.py](gpt3.py) | GPT-3-style model definition (`GPT3`, `GPT3Config`) |
-| [prepare.py](prepare.py) | Download + tokenize FineWeb-Edu into `.npy` shards (pretraining data) |
-| [prepare_finetune.py](prepare_finetune.py) | Tokenize smol-smoltalk conversations into chat-formatted shards (SFT data) |
-| [chat_tokenizer.py](chat_tokenizer.py) | GPT-2 tiktoken encoding extended with chat special tokens |
+| [models/gpt2.py](models/gpt2.py) | GPT-2 model definition (`GPT`, `GPTConfig`) |
+| [models/gpt3.py](models/gpt3.py) | GPT-3-style model definition (`GPT3`, `GPT3Config`) |
+| [models/tokenizer.py](models/tokenizer.py) | GPT-2 tiktoken encoding extended with chat special tokens |
+| [data/prepare.py](data/prepare.py) | Download + tokenize FineWeb-Edu into `.npy` shards (pretraining data) |
+| [data/prepare_finetune.py](data/prepare_finetune.py) | Tokenize smol-smoltalk conversations into chat-formatted shards (SFT data) |
+| [common.py](common.py) | Shared `build_model()` / `get_device()` helpers used by the scripts |
 | [train.py](train.py) | Training / fine-tuning loop for either architecture |
 | [sample.py](sample.py) | Generate text completions from a pretrained model |
 | [sample_chat.py](sample_chat.py) | Generate chat replies from a fine-tuned model |
+| [eval_hellaswag.py](eval_hellaswag.py) | Score a model on the HellaSwag benchmark |
+| [server/](server/) | FastAPI backend (`/api/chat` SSE stream) for the web app |
+| [web/](web/) | React + Vite single-page chat frontend |
 
 ## Requirements
 
@@ -40,7 +52,7 @@ pip install torch numpy tiktoken datasets tqdm
 Downloads the 10B-token FineWeb-Edu sample and writes ~100 tokenized shards to `edu_fineweb10B/` (shard 0 is held out for validation):
 
 ```bash
-python prepare.py
+python data/prepare.py
 ```
 
 ### 2. Pretrain a model
@@ -82,7 +94,7 @@ Tokenizes smol-smoltalk into chat-formatted shards in `smoltalk_chat/`. Each con
 ```
 
 ```bash
-python prepare_finetune.py
+python data/prepare_finetune.py
 ```
 
 ### 2. Fine-tune from the pretrained checkpoint
@@ -104,9 +116,30 @@ Wraps each prompt in the chat template and samples the assistant's reply, stoppi
 python sample_chat.py --arch gpt3 --checkpoint gpt3_chat.pth
 ```
 
+## Web chat app
+
+A FastAPI backend ([server/](server/)) plus a React + Vite frontend ([web/](web/))
+let you chat with a fine-tuned model in the browser. The backend discovers every
+`*_chat.pth` checkpoint in the repo root, loads it on first use, and streams
+replies over Server-Sent Events; the frontend renders the conversation.
+
+```bash
+# 1. backend (from the repo root) — serves /api on http://localhost:8000
+pip install -r server/requirements.txt
+uvicorn server.app:app --reload
+
+# 2. frontend (in another terminal) — dev server proxies /api to the backend
+cd web
+npm install
+npm run dev
+```
+
+For a single-origin production build, run `npm run build` in `web/` and the
+backend will serve the generated `web/dist/` automatically.
+
 ## Notes
 
-- **Tokenizer:** GPT-2 BPE (vocab 50,257, padded to 50,304). Chat fine-tuning adds 7 special tokens (ids 50257–50263) defined in [chat_tokenizer.py](chat_tokenizer.py).
+- **Tokenizer:** GPT-2 BPE (vocab 50,257, padded to 50,304). Chat fine-tuning adds 7 special tokens (ids 50257–50263) defined in [models/tokenizer.py](models/tokenizer.py).
 - **Precision:** training prefers bf16 where available, falling back to fp16 + `GradScaler` on older CUDA GPUs and `mps`.
 - **Data and weights** (`edu_fineweb10B/`, `smoltalk_chat/`, `*.pth`) are gitignored — regenerate them with the `prepare` scripts and `train.py`.
 

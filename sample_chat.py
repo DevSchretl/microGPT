@@ -2,8 +2,8 @@
 Chat sampling script for the fine-tuned model.
 
 Loads a model fine-tuned by train.py on the conversation data from
-prepare_finetune.py, wraps each prompt in the chat template, and samples the
-assistant's reply (stopping at <|assistant_end|>).
+data/prepare_finetune.py, wraps each prompt in the chat template, and samples
+the assistant's reply (stopping at <|assistant_end|>).
 
 Usage:
     $ python sample_chat.py
@@ -15,27 +15,8 @@ import argparse
 import torch
 from torch.nn import functional as F
 
-from chat_tokenizer import SPECIAL_TOKENS, get_encoding
-
-
-def build_model(arch):
-    """Instantiate a fresh model for the given architecture name."""
-    if arch == "gpt2":
-        from gpt2 import GPT, GPTConfig
-        return GPT(GPTConfig())
-    if arch == "gpt3":
-        from gpt3 import GPT3, GPT3Config
-        return GPT3(GPT3Config())
-    raise ValueError(f"unknown arch: {arch}")
-
-
-def get_device():
-    """Pick the best available device: cuda > mps > cpu."""
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
+from common import build_model, get_device
+from models import SPECIAL_TOKENS, get_encoding
 
 
 def parse_args():

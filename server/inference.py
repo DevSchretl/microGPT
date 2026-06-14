@@ -1,9 +1,9 @@
 """
 Inference wrapper around the fine-tuned chat model for the web backend.
 
-Reuses the model construction and chat template from sample_chat.py so the web
-server generates replies exactly the way the CLI does, but keeps the model
-loaded across requests and streams tokens out as they are produced.
+Reuses the same model construction and chat template as the sample_chat.py CLI
+so the web server generates replies exactly the way the CLI does, but keeps the
+model loaded across requests and streams tokens out as they are produced.
 """
 
 import threading
@@ -11,8 +11,8 @@ import threading
 import torch
 from torch.nn import functional as F
 
-from chat_tokenizer import SPECIAL_TOKENS, get_encoding
-from sample_chat import build_model, get_device
+from common import build_model, get_device
+from models import SPECIAL_TOKENS, get_encoding
 
 # Real GPT-2 vocab is 0..50256; 50257+ are the chat special tokens (and padding
 # up to the model's padded vocab_size), which have no printable byte form.
