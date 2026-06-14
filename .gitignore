@@ -15,6 +15,7 @@ __pycache__/
 # Datasets
 edu_fineweb10B/
 smoltalk_chat/
+hellaswag/
 
 # Tool-generated files
 .understand-anything/
