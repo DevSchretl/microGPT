@@ -7,6 +7,7 @@ samples continuations with top-k sampling.
 Usage:
     $ python sample.py
     $ python sample.py --prompt "The pyramids are" --max-new-tokens 50
+    $ python sample.py --num-shots 3      # prepend few-shot demonstrations
 """
 
 import argparse
@@ -14,7 +15,7 @@ import argparse
 import torch
 from torch.nn import functional as F
 
-from common import build_model, get_device
+from common import build_model, get_device, fewshot_text_prefix
 from models import get_encoding
 
 
@@ -26,6 +27,8 @@ def parse_args():
     p.add_argument("--num-samples", type=int, default=5)
     p.add_argument("--max-new-tokens", type=int, default=30)
     p.add_argument("--top-k", type=int, default=50)
+    p.add_argument("--num-shots", type=int, default=0,
+                   help="prepend N few-shot demonstrations from common.FEWSHOT_TEXT (0 = none)")
     args = p.parse_args()
     if args.checkpoint is None:
         args.checkpoint = f"{args.arch}_weights.pth"
@@ -56,8 +59,13 @@ def main():
 
     enc = get_encoding()
 
+    # Optional few-shot prefix prepended to every prompt (empty when --num-shots 0).
+    prefix_tokens = enc.encode(fewshot_text_prefix(args.num_shots))
+    if prefix_tokens:
+        print(f"few-shot: prepending {args.num_shots} demonstration(s)")
+
     for prompt in prompts:
-        prompt_tokens = enc.encode(prompt)
+        prompt_tokens = prefix_tokens + enc.encode(prompt)
         # Repeat the prompt into a batch so we draw num_samples continuations.
         # Rows are identical (same length), so no padding/masking is needed.
         x = (torch.tensor(prompt_tokens, dtype=torch.long, device=device)
@@ -79,7 +87,8 @@ def main():
 
         print(f"\n=== {prompt!r} ===")
         for i in range(args.num_samples):
-            tokens = x[i, :max_length].tolist()
+            # skip the shared few-shot prefix; show only this prompt + continuation
+            tokens = x[i, len(prefix_tokens):max_length].tolist()
             print(i+1, ">", enc.decode(tokens))
 
 

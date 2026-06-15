@@ -9,6 +9,26 @@ This is a compact, nanoGPT-style codebase for pretraining decoder-only transform
 
 Both models expose the same surface (`forward(idx, targets=None) -> (logits, loss)`, `configure_optimizers`, `config.block_size`), so the same training and sampling scripts drive either one.
 
+## Performance Progression
+
+Accuracy on [HellaSwag](https://rowanz.github.io/hellaswag/) (`acc_norm`, the
+length-normalized headline metric), measured with [eval_hellaswag.py](eval_hellaswag.py).
+Random chance is 25%; OpenAI's GPT-2 (124M) scores ~29.7% for reference.
+
+| Model | Setup | HellaSwag |
+| --- | --- | ---: |
+| **GPT-2 Base** | 124M params, 10B FineWeb-Edu tokens | 31% |
+| **GPT-3 Base** | 254M params, 10B FineWeb-Edu tokens | **38%** |
+| GPT-3 Base | + 3-shot demos | 36% |
+| **GPT-3 Chat** | GPT-3 Base + 500M SmolTalk tokens (SFT) | 34% |
+| GPT-3 Chat | + 1-shot demo | 34% |
+| GPT-3 Chat | + 3-shot demos | 33% |
+
+The pretrained **GPT-3 Base** scores highest on the benchmark. Few-shot demos and
+chat fine-tuning don't help the HellaSwag number, but **GPT-3 Chat** gives by far
+the most natural conversational replies — with a couple of few-shot demos it stays
+concise instead of rambling. Try it in the [live demo](https://devschretl-microgpt.hf.space/).
+
 ## Layout
 
 ```
@@ -26,7 +46,7 @@ web/        React + Vite chat frontend
 | [models/tokenizer.py](models/tokenizer.py) | GPT-2 tiktoken encoding extended with chat special tokens |
 | [data/prepare.py](data/prepare.py) | Download + tokenize FineWeb-Edu into `.npy` shards (pretraining data) |
 | [data/prepare_finetune.py](data/prepare_finetune.py) | Tokenize smol-smoltalk conversations into chat-formatted shards (SFT data) |
-| [common.py](common.py) | Shared `build_model()` / `get_device()` helpers used by the scripts |
+| [common.py](common.py) | Shared `build_model()` / `get_device()` helpers plus the editable few-shot demo sets (`FEWSHOT_TEXT`, `FEWSHOT_CHAT`) |
 | [train.py](train.py) | Training / fine-tuning loop for either architecture |
 | [sample.py](sample.py) | Generate text completions from a pretrained model |
 | [sample_chat.py](sample_chat.py) | Generate chat replies from a fine-tuned model |
@@ -42,7 +62,7 @@ web/        React + Vite chat frontend
 Install dependencies:
 
 ```bash
-pip install torch numpy tiktoken datasets tqdm
+pip install torch numpy tiktoken datasets tqdm requests
 ```
 
 ## Quickstart
@@ -81,6 +101,17 @@ See `python train.py --help` for the full list.
 ```bash
 python sample.py --arch gpt3
 python sample.py --arch gpt3 --prompt "The pyramids are" --max-new-tokens 50
+python sample.py --arch gpt3 --num-shots 3   # prepend few-shot demos from common.FEWSHOT_TEXT
+```
+
+### 4. Evaluate on HellaSwag
+
+Reproduce the [Performance Progression](#performance-progression) numbers. The
+dataset is downloaded and cached on first run:
+
+```bash
+python eval_hellaswag.py --arch gpt3
+python eval_hellaswag.py --arch gpt3 --num-shots 3   # 3-shot; demos drawn from the train split
 ```
 
 ## Fine-tuning into a chat model
@@ -114,6 +145,7 @@ Wraps each prompt in the chat template and samples the assistant's reply, stoppi
 
 ```bash
 python sample_chat.py --arch gpt3 --checkpoint gpt3_chat.pth
+python sample_chat.py --arch gpt3 --checkpoint gpt3_chat.pth --num-shots 1   # prime with example turns
 ```
 
 ## Web chat app

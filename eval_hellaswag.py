@@ -16,6 +16,7 @@ Two metrics are reported:
 Usage:
     $ python eval_hellaswag.py
     $ python eval_hellaswag.py --arch gpt3 --limit 300
+    $ python eval_hellaswag.py --num-shots 5    # 5-shot (shots from the train split)
 """
 
 import argparse
@@ -64,10 +65,21 @@ def iter_examples(path):
             yield json.loads(line)
 
 
-def render_example(example, enc):
+def build_fewshot_prefix(train_path, enc, num_shots):
+    """Encode `num_shots` solved train examples (context + correct ending) into a
+    single shared in-context prefix to prepend to every evaluated example."""
+    shots = []
+    for ex in iter_examples(train_path):
+        if len(shots) >= num_shots:
+            break
+        shots.append(ex["ctx"] + " " + ex["endings"][ex["label"]])
+    return enc.encode("".join(s + "\n\n" for s in shots))
+
+
+def render_example(example, enc, prefix_tokens=()):
     """Turn one example into (tokens, mask, label).
 
-    tokens: (4, T) padded token ids for "context + ending" for each candidate.
+    tokens: (4, T) padded token ids for "[few-shot prefix +] context + ending".
     mask:   (4, T) 1.0 on the ending tokens (where the loss is measured), else 0.
     label:  index of the correct ending.
     """
@@ -76,8 +88,8 @@ def render_example(example, enc):
     for ending in example["endings"]:
         # leading space so the ending joins the context as natural text
         end_tokens = enc.encode(" " + ending)
-        rows.append(ctx_tokens + end_tokens)
-        masks.append([0] * len(ctx_tokens) + [1] * len(end_tokens))
+        rows.append([*prefix_tokens, *ctx_tokens, *end_tokens])
+        masks.append([0] * (len(prefix_tokens) + len(ctx_tokens)) + [1] * len(end_tokens))
 
     max_len = max(len(r) for r in rows)
     tokens = torch.zeros(4, max_len, dtype=torch.long)
@@ -116,6 +128,8 @@ def parse_args():
     p.add_argument("--split", default="val", choices=["val", "train", "test"])
     p.add_argument("--limit", type=int, default=0, help="evaluate at most N examples (0 = all)")
     p.add_argument("--data-dir", default="hellaswag", help="where to cache the dataset")
+    p.add_argument("--num-shots", type=int, default=0,
+                   help="prepend N solved train-split examples as an in-context prefix (0 = zero-shot)")
     args = p.parse_args()
     if args.checkpoint is None:
         args.checkpoint = f"{args.arch}_weights.pth"
@@ -137,12 +151,20 @@ def main():
     enc = get_encoding()
     path = download(args.split, args.data_dir)
 
+    # Optional k-shot prefix built from solved train-split examples, shared across
+    # every evaluated example (only the candidate ending is ever scored).
+    prefix_tokens = ()
+    if args.num_shots > 0:
+        train_path = download("train", args.data_dir)
+        prefix_tokens = build_fewshot_prefix(train_path, enc, args.num_shots)
+        print(f"few-shot: {args.num_shots}-shot prefix from train ({len(prefix_tokens)} tokens)")
+
     total = correct_norm = correct = skipped = 0
     bar = tqdm(iter_examples(path), desc="hellaswag")
     for example in bar:
         if args.limit and total >= args.limit:
             break
-        tokens, mask, label = render_example(example, enc)
+        tokens, mask, label = render_example(example, enc, prefix_tokens)
         # HellaSwag rows are short, but skip anything past the context window.
         if tokens.size(1) > model.config.block_size:
             skipped += 1

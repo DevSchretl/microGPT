@@ -7,7 +7,7 @@ the tokenized shards produced by data/prepare.py.
 Usage:
     $ python train.py                                  # gpt2, resume gpt2_weights.pth
     $ python train.py --arch gpt3 --scratch            # train gpt3 from random init
-    $ python train.py --arch gpt3 --scratch --batch-size 256 --compile-mode max-autotune
+    $ python train.py --arch gpt3 --scratch --batch-size 256 --compile-mode max-autotune-no-cudagraphs
 """
 
 import argparse

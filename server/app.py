@@ -28,7 +28,7 @@ def discover_checkpoints():
     found = {}
     for path in sorted(ROOT.glob(f"*{SUFFIX}")):
         arch = path.name[: -len(SUFFIX)]
-        if arch in ("gpt2", "gpt3"):
+        if arch in ("gpt2", "gpt3", "gpt3.1"):
             found[arch] = path
     return found
 
@@ -39,7 +39,7 @@ _models = {}  # arch -> ChatModel, loaded on first use
 
 def get_model(arch):
     if arch not in _models:
-        _models[arch] = ChatModel(arch, str(_checkpoints[arch]))
+        _models[arch] = ChatModel("gpt3", str(_checkpoints[arch]))
     return _models[arch]
 
 

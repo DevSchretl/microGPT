@@ -8,6 +8,7 @@ the assistant's reply (stopping at <|assistant_end|>).
 Usage:
     $ python sample_chat.py
     $ python sample_chat.py --arch gpt2 --checkpoint gpt2_chat.pth --num-samples 3
+    $ python sample_chat.py --num-shots 3   # prime with example turns
 """
 
 import argparse
@@ -15,7 +16,7 @@ import argparse
 import torch
 from torch.nn import functional as F
 
-from common import build_model, get_device
+from common import build_model, get_device, FEWSHOT_CHAT
 from models import SPECIAL_TOKENS, get_encoding
 
 
@@ -26,6 +27,8 @@ def parse_args():
     p.add_argument("--num-samples", type=int, default=3, help="replies sampled per prompt")
     p.add_argument("--max-new-tokens", type=int, default=200)
     p.add_argument("--top-k", type=int, default=50)
+    p.add_argument("--num-shots", type=int, default=0,
+                   help="prepend N example turns from common.FEWSHOT_CHAT (0 = none)")
     args = p.parse_args()
     if args.checkpoint is None:
         args.checkpoint = f"{args.arch}_chat.pth"
@@ -50,6 +53,17 @@ def main():
     user_end   = SPECIAL_TOKENS["<|user_end|>"]
     asst_start = SPECIAL_TOKENS["<|assistant_start|>"]
     asst_end   = SPECIAL_TOKENS["<|assistant_end|>"]
+    first_special = min(SPECIAL_TOKENS.values())  # ids >= this are special tokens
+
+    # Optional few-shot priming: complete example (user, assistant) turns that go
+    # before the real prompt so the model imitates the demonstrated answers.
+    shots = FEWSHOT_CHAT[:args.num_shots] if args.num_shots > 0 else []
+    shot_ids = []
+    for q, a in shots:
+        shot_ids += [user_start, *enc.encode_ordinary(q), user_end,
+                     asst_start, *enc.encode_ordinary(a), asst_end]
+    if shots:
+        print(f"few-shot: prepending {len(shots)} example turn(s)")
 
     prompts = [
         "What is the capital of France?",
@@ -62,8 +76,9 @@ def main():
     ]
 
     for prompt in prompts:
-        # Chat template: a single user turn, then hand the floor to the assistant.
-        ids = [bos, user_start, *enc.encode_ordinary(prompt), user_end, asst_start]
+        # Chat template: few-shot example turns (if any), then the user turn, then
+        # hand the floor to the assistant.
+        ids = [bos, *shot_ids, user_start, *enc.encode_ordinary(prompt), user_end, asst_start]
         x = (torch.tensor(ids, dtype=torch.long, device=device)
              .unsqueeze(0)
              .repeat(args.num_samples, 1))                     # (num_samples, T)
@@ -89,9 +104,11 @@ def main():
         print(f"\n=== {prompt} ===")
         for i in range(args.num_samples):
             reply = x[i, prompt_len:].tolist()                 # only the assistant's turn
-            if asst_end in reply:
-                reply = reply[:reply.index(asst_end)]          # trim at the stop token
-            print(i + 1, ">", enc.decode(reply))
+            # trim at the first special token -- <|assistant_end|>, or any other
+            # structural token a small model might emit to end the turn (more likely
+            # with few-shot); otherwise they would print as literal "<|...|>" text.
+            stop = next((j for j, t in enumerate(reply) if t >= first_special), len(reply))
+            print(i + 1, ">", enc.decode(reply[:stop]))
 
 
 if __name__ == "__main__":

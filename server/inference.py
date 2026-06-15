@@ -18,6 +18,18 @@ from models import SPECIAL_TOKENS, get_encoding
 # up to the model's padded vocab_size), which have no printable byte form.
 FIRST_SPECIAL_TOKEN = 50257
 
+# Few-shot priming: a couple of short example turns are prepended to every prompt
+# so the (small, 254M) model imitates the concise pattern instead of rambling --
+# demonstration works far better than a natural-language "be brief" instruction
+# for a model this size. The examples are prompt-only (never shown in the UI), and
+# the length of these answers is the knob for how long real replies come out:
+# keep them concise but complete (one full sentence) to avoid terse non-answers.
+FEWSHOT_EXAMPLES = [
+    ("What is the capital of France?", "The capital of France is Paris."),
+    ("Why is the sky blue?", "Sunlight scatters off air molecules, and blue scatters the most."),
+    ("Any tips for staying focused?", "Work in short blocks and put your phone out of reach."),
+]
+
 
 class ChatModel:
     """A loaded chat model that builds prompts from history and streams replies."""
@@ -41,6 +53,11 @@ class ChatModel:
         # one model on one device can't run two generations at once
         self._lock = threading.Lock()
 
+        # Encode the few-shot priming turns once; prepended to every prompt below.
+        self.fewshot_ids = []
+        for q, a in FEWSHOT_EXAMPLES:
+            self.fewshot_ids += self._encode_turn("user", q) + self._encode_turn("assistant", a)
+
     def _encode_turn(self, role, content):
         body = self.enc.encode_ordinary(content)
         if role == "user":
@@ -49,8 +66,9 @@ class ChatModel:
 
     def build_prompt(self, messages, max_new_tokens):
         """Tokenize the conversation, dropping oldest whole turns to fit the window."""
-        # leave room for the leading <|bos|> and the trailing <|assistant_start|>
-        budget = self.block_size - max_new_tokens - 2
+        # leave room for <|bos|>, the trailing <|assistant_start|>, and the
+        # always-kept few-shot priming turns
+        budget = self.block_size - max_new_tokens - 2 - len(self.fewshot_ids)
         turns = [self._encode_turn(m["role"], m["content"]) for m in messages]
 
         kept, total = [], 0
@@ -61,7 +79,7 @@ class ChatModel:
             total += len(turn)
         kept.reverse()
 
-        ids = [self.bos]
+        ids = [self.bos, *self.fewshot_ids]  # prime with the concise examples
         for turn in kept:
             ids.extend(turn)
         ids.append(self.asst_start)  # hand the floor to the assistant
