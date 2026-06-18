@@ -9,6 +9,8 @@ This is a compact, nanoGPT-style codebase for pretraining decoder-only transform
 
 Both models expose the same surface (`forward(idx, targets=None) -> (logits, loss)`, `configure_optimizers`, `config.block_size`), so the same training and sampling scripts drive either one.
 
+For the reasoning behind the architecture, dataset, and training choices, see [DECISIONS.md](DECISIONS.md).
+
 ## Performance Progression
 
 Accuracy on [HellaSwag](https://rowanz.github.io/hellaswag/) (`acc_norm`, the
@@ -26,8 +28,8 @@ Random chance is 25%; OpenAI's GPT-2 (124M) scores ~29.7% for reference.
 
 The pretrained **GPT-3 Base** scores highest on the benchmark. Few-shot demos and
 chat fine-tuning don't help the HellaSwag number, but **GPT-3 Chat** gives by far
-the most natural conversational replies — with a couple of few-shot demos it stays
-concise instead of rambling. Try it in the [live demo](https://devschretl-microgpt.hf.space/).
+the most natural conversational replies, especially with a couple of few-shot demos.
+Try it in the [live demo](https://devschretl-microgpt.hf.space/).
 
 ## Layout
 
